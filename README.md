@@ -36,7 +36,7 @@
 前置：装好 Claude Code。
 
 ```bash
-git clone <your-fork-url> job-decision-engine
+git clone https://github.com/sunjialei1237-beep/job-decision-engine job-decision-engine
 cd job-decision-engine
 cp profile.example.md profile.md      # 编辑 profile.md，填你的画像
 ```
