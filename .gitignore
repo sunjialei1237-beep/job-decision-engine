@@ -1,0 +1,19 @@
+# 候选人画像 —— 每人自填，绝不提交
+profile.md
+
+# 运行产物
+output/
+reports/
+*.log
+
+# 真实抓取/投递数据（若把本仓和自己的数据源放一起）
+data/
+candidates.json
+applied.json
+
+# 系统/编辑器
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

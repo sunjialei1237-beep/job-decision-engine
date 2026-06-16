@@ -1,0 +1,29 @@
+[
+  {
+    "company": "云栖智能科技",
+    "job_title": "AI 解决方案工程师（实习）",
+    "full_jd": "【岗位职责】\n1. 对接企业客户，梳理业务场景与痛点；\n2. 基于公司 AI 平台设计可落地的解决方案并跟进交付；\n3. 协助售前演示与 POC 验证；\n4. 收集客户反馈反哺产品迭代。\n\n【任职要求】\n1. 本科及以上，计算机/软件/AI 相关专业；\n2. 熟悉大模型应用开发，有 RAG / Agent / 工作流编排经验优先；\n3. 良好的沟通与文档能力；\n4. 每周实习 ≥4 天，可转正。",
+    "url": "https://example-jobs.com/position/sample-001",
+    "rule_score": 88,
+    "applied": false,
+    "is_new": true
+  },
+  {
+    "company": "星河数据服务",
+    "job_title": "AI 商务拓展（AI BD）",
+    "full_jd": "【岗位职责】\n1. 通过电话、微信主动开发潜在企业客户；\n2. 推介公司 AI 产品，完成签约并达成业绩目标；\n3. 维护客户关系，促成复购。\n\n【任职要求】\n1. 学历不限，有销售/电销经验优先；\n2. 抗压能力强，目标导向；\n3. 底薪 + 高提成。",
+    "url": "https://example-jobs.com/position/sample-002",
+    "rule_score": 61,
+    "applied": false,
+    "is_new": true
+  },
+  {
+    "company": "墨白工作室",
+    "job_title": "AI 内容运营实习生",
+    "full_jd": "【岗位职责】\n1. 使用 AI 工具批量生成短视频脚本与文案；\n2. 负责多账号日常发布与数据统计；\n3. 完成主管交办的其他内容工作。\n\n【任职要求】\n1. 在校学生，专业不限；\n2. 会用 ChatGPT 等工具；\n3. 细心踏实。",
+    "url": "https://example-jobs.com/position/sample-003",
+    "rule_score": 45,
+    "applied": false,
+    "is_new": true
+  }
+]
