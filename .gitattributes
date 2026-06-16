@@ -1,0 +1,10 @@
+# 统一换行符，避免跨平台贡献者的 LF/CRLF 噪音
+* text=auto eol=lf
+
+# 二进制资源不转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
