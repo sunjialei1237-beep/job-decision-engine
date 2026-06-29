@@ -12,6 +12,7 @@ license = { text = "MIT" }
 dependencies = [
     "pydantic>=2",
     "openai>=1",
+    "anthropic>=0.40",
 ]
 
 [tool.setuptools]
