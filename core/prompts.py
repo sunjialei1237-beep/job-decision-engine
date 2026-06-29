@@ -11,7 +11,7 @@ def build_analysis_prompt(title: str, company: str, jd: str, profile: str) -> st
         f"公司:{company}\n岗位:{title}\nJD原文:\n{jd}\n\n{profile}\n\n"
         "你是「AI ToB 求职岗位洞察与决策引擎」:看穿岗位本质 + 判断值不值得投,不是总结JD。\n"
         "【最优先】先判 direction:这个岗在候选人方向里是 A级方向 / B级技术 / 方向偏离。\n"
-        "输出 JSON 对象,字段如下:\n"
+        "输出 JSON 对象,必须包含下列全部 13 个字段,缺任何一个都算失败。字段如下:\n"
         '- direction:枚举值三选一,"A"(A级方向=ToB销售/解决方案/售前/商业化/AI产品/Agent产品)、'
         '"B"(B级技术=AI技术)、"OFF"(方向偏离=运营/市场/纯C端/非AI)。只输出字母。\n'
         "- direction_reason:direction 的一句理由\n"
@@ -29,6 +29,8 @@ def build_analysis_prompt(title: str, company: str, jd: str, profile: str) -> st
         "- score:优先级评分(0-10整数,权重 方向匹配30%/AI相关20%/ToB20%/技能迁移15%/与候选人阶段匹配15%。"
         "A级方向岗方向分满、B级技术岗方向分低,必须有区分度别集中中间值)\n"
         "- conclusion:结论(强烈建议投递/建议投递/可以尝试/性价比低/不建议)\n"
+        "输出严格遵循此 JSON 结构(全部 13 字段必填,缺任一尤其 tob 都算失败):\n"
+        '{"direction":"A|B|OFF","direction_reason":"一句理由","ai_relevant":"是/否+理由","ai_score":1-5整数,"tob":"高/中/低+理由","role_type":"类型","skill_migrate":"X/5+理由","recommend":"强烈推荐/推荐/勉强/不推荐+原因","hidden_signal":"看穿本质","capability_bar":"低/可跨越/偏高/过高+理由","hr_reply_prob":"高/中/低+原因","score":0-10整数,"conclusion":"强烈建议投递/建议投递/可以尝试/性价比低/不建议"}\n'
         "【硬规则·纯电销】销售岗若实为纯电销(电话量驱动/cold-call/外呼/无售前/方案/产品讲解成分)→ "
         "conclusion=不建议、recommend=不推荐、score≤3,不进清单;需懂产品讲方案的售前/解决方案/技术销售岗不受此限。\n"
         "约束:禁止复述JD原文、每个判断必须有推断逻辑、禁空话、评分必须有区分度。\n"

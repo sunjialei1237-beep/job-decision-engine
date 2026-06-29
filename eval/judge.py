@@ -1,16 +1,17 @@
 """LLM-as-judge:用独立模型族评 analyzer 的判断质量。
 
 rubric 见 judge_prompt.md。judge 应与 analyzer 用不同模型族,避免 self-preference。
-复用 core.llm.LLMClient(client 可注入,评测时传 judge_model)。
+复用 core.llm.LLMClient + core.analyze._complete_validated(schema-feedback retry)。
 """
 from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 
-from core.llm import LLMClient, LLMError
+from core.analyze import _complete_validated
+from core.llm import LLMClient
 from core.schemas import AnalysisResult, Direction
 
 
@@ -40,9 +41,9 @@ def build_judge_prompt(
         f"=== 候选人画像 ===\n{profile}\n\n"
         f"=== 待评岗位 ===\n公司:{company}\n岗位:{title}\nJD原文:\n{jd}\n\n"
         f"=== analyzer 输出(待评判)===\n{analysis.model_dump_json(indent=2)}\n\n"
-        "输出 JSON,字段:direction(A/B/OFF)、direction_agree(bool)、"
-        "score_plausibility(1-5)、hidden_signal_plausibility(1-5)、"
-        "rationale_plausible(bool)、overall(1-5)、comment。只输出 JSON。"
+        "输出严格遵循此 JSON 结构(全部 7 字段必填,缺任一都算失败):\n"
+        '{"direction":"A|B|OFF","direction_agree":true或false,"score_plausibility":1-5整数,"hidden_signal_plausibility":1-5整数,"rationale_plausible":true或false,"overall":1-5整数,"comment":"一句话"}\n'
+        "只输出 JSON。"
     )
 
 
@@ -58,9 +59,9 @@ def judge_analysis(
 ) -> JudgeResult:
     """用 judge 模型评一份 analyzer 报告。temperature 默认 0(评测要确定性)。"""
     cli = client or LLMClient()
-    prompt = build_judge_prompt(analysis, title, company, jd, profile)
-    data = cli.complete_json(prompt, temperature=temperature)
-    try:
-        return JudgeResult.model_validate(data)
-    except ValidationError as e:
-        raise LLMError(f"模型输出不符合 JudgeResult schema: {e}\n原始数据: {data}") from e
+    return _complete_validated(
+        cli,
+        build_judge_prompt(analysis, title, company, jd, profile),
+        JudgeResult,
+        temperature=temperature,
+    )
