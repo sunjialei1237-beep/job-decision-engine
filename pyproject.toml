@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "job-decision-engine"
+version = "0.1.0"
+description = "JD 决策引擎:看穿岗位本质 + 判断投递价值 + 生成话术,平台无关。"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "pydantic>=2",
+    "openai>=1",
+]
+
+[tool.setuptools]
+packages = ["core"]

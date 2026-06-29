@@ -53,6 +53,37 @@ cp profile.example.md profile.md      # 编辑 profile.md，填你的画像
 /job-filter 2026-06-16 40      # 批次日期 + 深度评分数量
 ```
 
+## 作为 Python 库调用(Step 0 引擎)
+
+决策引擎也抽成了纯 Python 函数,可被评测脚本、闭环脚本、API 直接调用,无需 Claude Code。`core/` 是引擎真核;`agents/*.md` 保留为 Claude Code 形态的 prompt 对照。
+
+```bash
+pip install -e .          # 或 pip install -r requirements.txt
+```
+
+设 LLM 环境变量(走 OpenAI 协议;可指向 OpenAI / LiteLLM 代理 / 智谱兼容端点等):
+
+```bash
+export BASE_URL=https://open.bigmodel.cn/api/paas/v4   # 智谱 GLM 示例;连 OpenAI 官方则省略
+export API_KEY=your-key
+export MODEL=glm-5.2
+# Windows PowerShell: $env:BASE_URL="..."; $env:API_KEY="..."; $env:MODEL="..."
+```
+
+```python
+from core import analyze_jd, derive_level, generate_greeting
+
+profile = open("profile.md", encoding="utf-8").read()
+result = analyze_jd(jd="JD 正文", title="AI 解决方案工程师", company="某公司", profile=profile)
+
+print(result.direction, result.score, result.conclusion)  # A/B/OFF · 0-10 · 结论
+print(result.hidden_signal)                                # 隐藏信号
+print(derive_level(result))                                # S/A/B/不建议
+print(generate_greeting(title="AI 解决方案工程师", company="某公司", jd="JD 正文", profile=profile))
+```
+
+快速验证:`python examples/run_engine.py` 用 `examples/jd-sample.md` 跑通整条链路。需要 Python 3.10+。
+
 ## 目录结构
 
 ```
