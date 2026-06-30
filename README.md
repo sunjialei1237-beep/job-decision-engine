@@ -84,26 +84,47 @@ print(generate_greeting(title="AI 解决方案工程师", company="某公司", j
 
 快速验证:`python examples/run_engine.py` 用 `examples/jd-sample.md` 跑通整条链路。需要 Python 3.10+。
 
+## 企业级工程层:评测 + 闭环校准
+
+引擎能跑只是起点。本项目还包含把个人脚本升级为**企业级 agent** 的工程层:评测、闭环校准、可靠性。代码公开,数据(golden 集、投递 outcome)各人自备。
+
+### 评测 `eval/`(Step 1)
+golden 集 + 跨模型 LLM-as-judge + 回归。每条 golden 跑 N 次报 mean±std,避免非确定性噪声误报;analyzer 与 judge 用不同模型族避免 self-preference。
+
+```bash
+python eval/run_eval.py --analyzer-model glm-5.2 --judge-model deepseek-chat --repeats 3
+# 验证管线(不调 LLM):python eval/run_eval.py --golden eval/golden.example.jsonl --fake
+```
+
+产出 `eval/reports/<date>.md`:方向准确率 / judge 评分 / inter-rater / 异常 case。
+
+### 闭环校准 `closedloop/` + `calibrate/`(Step 2)
+- **`closedloop/`** 攒数据:给投递记录回填 outcome(回复/面试/拒/沉默),算转化漏斗。
+- **`calibrate/`** 用数据校准评分:`load_feedback` join golden × 投递并打分 → `correlate` 算评分↔outcome 相关性 → `reviewer.md` 反思 agent 对偏差 case 归因。
+
+```bash
+# 1. 回填 outcome(时间推导沉默 + 手动正向)
+python closedloop/backfill_outcomes.py --applied your-applied.json --out data/applied_enriched.json
+# 2. 装配评分集(对 join 出的 JD 现跑 analyze_jd 打分)
+python calibrate/load_feedback.py --analyzer-model glm-5.2
+# 3. 校准分析
+python calibrate/correlate.py --scored data/scored.jsonl
+```
+
+**诚实 gating**:`correlate` 在真实 HR 反馈 < 30 条时拒绝计算相关性,只输出"数据不足"报告 —— 不拿噪声数据假装校准通过。反思 agent `reviewer.md` 只在闭环分析按需触发,不进投递快路径(Anthropic workflow-vs-agent 判据:确定性 pipeline 不用反思,闭环归因才是反思的合理战场)。
+
 ## 目录结构
 
 ```
 job-decision-engine/
-├── commands/
-│   ├── job-analyze.md      # 单条 JD 分析编排
-│   └── job-filter.md       # 批量评分编排（top 40 投递清单）
-├── agents/
-│   ├── job-analyzer.md     # 决策引擎 prompt（画像注入点）
-│   └── greeting-generator.md  # 话术引擎 prompt（画像注入点）
-├── docs/
-│   ├── how-it-works.md     # 架构与可复用的编排模式
-│   ├── candidate-profile.md # 如何填 profile.md
-│   ├── data-schema.md      # candidates.json 契约（数据源适配器）
-│   └── architecture.md     # 完整日流水线编排模式参考
-├── examples/
-│   ├── candidates.sample.json
-│   ├── jd-sample.md        # 虚构 JD，可直接 demo
-│   └── output-sample.md    # 示例输出
-├── profile.example.md      # 候选人画像模板（复制为 profile.md 自填）
+├── core/                   # 引擎真核:analyze_jd / generate_greeting 纯函数(Step 0)
+├── commands/  agents/      # Claude Code 形态的编排与 prompt(画像注入点)
+├── eval/                   # 评测:golden + 跨模型 judge + 回归(Step 1)
+├── closedloop/             # 闭环数据:outcome 回填 + 转化漏斗(Step 2)
+├── calibrate/              # 闭环校准:load_feedback + correlate + reviewer(Step 2)
+├── docs/                   # how-it-works / candidate-profile / data-schema / architecture
+├── examples/               # candidates.sample.json / jd-sample.md / output-sample.md
+├── profile.example.md      # 候选人画像模板(复制为 profile.md 自填)
 ├── LICENSE
 └── README.md
 ```

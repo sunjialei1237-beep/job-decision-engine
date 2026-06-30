@@ -15,7 +15,7 @@ applied.json
 eval/golden.jsonl
 eval/reports/
 trace/runs/
-calibrate/
+calibrate/reports/
 
 # Python 缓存与构建产物
 __pycache__/
