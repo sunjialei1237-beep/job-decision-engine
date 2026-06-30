@@ -250,6 +250,9 @@ def write_report(path, results, summary, args, has_gold_direction, analyzer_mode
 # ---------- main ----------
 
 def main() -> None:
+    # Windows 中文 locale 默认 GBK,print 重定向到文件时 emoji(⚠️)触发 UnicodeEncodeError。强制 UTF-8。
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
     p = argparse.ArgumentParser(description="JD agent 评测")
     p.add_argument("--golden", default="eval/golden.jsonl")
     p.add_argument("--repeats", type=int, default=3)
