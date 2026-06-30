@@ -64,4 +64,5 @@ def judge_analysis(
         build_judge_prompt(analysis, title, company, jd, profile),
         JudgeResult,
         temperature=temperature,
+        schema_retries=2,
     )

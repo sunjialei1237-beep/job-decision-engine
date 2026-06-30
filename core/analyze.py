@@ -63,6 +63,7 @@ def analyze_jd(
         build_analysis_prompt(title, company, jd, profile),
         AnalysisResult,
         temperature=temperature,
+        schema_retries=2,
     )
 
 
