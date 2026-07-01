@@ -116,7 +116,7 @@ class TestCompleteJsonTrace(unittest.TestCase):
             os.environ["TRACE_DIR"] = self._old_dir
 
     def test_success_logs_step_and_output(self) -> None:
-        with patch.object(self.cli, "_call", return_value='{"k": 1}'):
+        with patch.object(self.cli, "_call", return_value=('{"k": 1}', None)):
             data = self.cli.complete_json("prompt-here", step="analyze")
         self.assertEqual(data, {"k": 1})
         rows = _read_jsonl(Path(self._tmp))
@@ -124,8 +124,35 @@ class TestCompleteJsonTrace(unittest.TestCase):
         self.assertEqual(rows[0]["step"], "analyze")
         self.assertEqual(rows[0]["model"], self.cli.model)
         self.assertEqual(rows[0]["output_summary"], '{"k": 1}')
+        # usage=None(mock 拿不到响应头)时不写 token/cost 字段,保持旧 6 字段
+        self.assertNotIn("token_in", rows[0])
         # mock 的 _call 瞬时返回,latency 可能 round 到 0.0;只校验非负
         self.assertGreaterEqual(rows[0]["latency_ms"], 0)
+
+    def test_logs_token_and_cost_when_usage(self) -> None:
+        # _call 返回 (content, usage):Phase 2 trace 在此追加 token/cost 字段
+        with patch.object(
+            self.cli, "_call",
+            return_value=('{"k": 1}', {"token_in": 1000, "token_out": 500}),
+        ):
+            self.cli.complete_json("p", step="analyze")
+        row = _read_jsonl(Path(self._tmp))[0]
+        self.assertEqual(row["token_in"], 1000)
+        self.assertEqual(row["token_out"], 500)
+        # model 默认 gpt-4o-mini 有价目 → cost 估算落盘
+        self.assertIn("cost_usd", row)
+        self.assertGreater(row["cost_usd"], 0)
+
+    def test_no_cost_for_unknown_model(self) -> None:
+        cli = LLMClient(api_key="fake-key", base_url="http://localhost", model="totally-unknown-model")
+        with patch.object(
+            cli, "_call",
+            return_value=('{"k": 1}', {"token_in": 100, "token_out": 50}),
+        ):
+            cli.complete_json("p")
+        row = _read_jsonl(Path(self._tmp))[0]
+        self.assertEqual(row["token_in"], 100)  # token 仍记
+        self.assertNotIn("cost_usd", row)        # 未知模型不算 cost
 
     def test_error_logs_each_attempt_then_raises(self) -> None:
         def boom(_prompt, _temp):
@@ -139,7 +166,7 @@ class TestCompleteJsonTrace(unittest.TestCase):
         self.assertTrue(all(r["step"] == "greeting" for r in rows))
 
     def test_default_step_is_llm(self) -> None:
-        with patch.object(self.cli, "_call", return_value='{"k": 1}'):
+        with patch.object(self.cli, "_call", return_value=('{"k": 1}', None)):
             self.cli.complete_json("p")
         rows = _read_jsonl(Path(self._tmp))
         self.assertEqual(rows[0]["step"], "llm")

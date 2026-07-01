@@ -1,0 +1,33 @@
+# 私有物:绝不进镜像
+profile.md
+trace/
+data/
+candidates.json
+applied.json
+
+# 评测/闭环私有数据(代码进镜像,数据不进)
+eval/golden.jsonl
+eval/reports/
+calibrate/reports/
+
+# 构建产物 / 缓存
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# 编辑器 / 系统 / VCS
+.git/
+.gitignore
+.github/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# docker 自身文件不必进镜像
+Dockerfile
+.dockerignore
+docker-compose.yml

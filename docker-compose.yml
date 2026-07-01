@@ -1,0 +1,23 @@
+# 本地一键起服务。API_KEY/BASE_URL/MODEL 从宿主 env 读(先在 shell 里 export,
+# 或写入 .env 与本文件同目录)。profile 挂载只读;trace 落宿主便于复盘。
+#
+# 准备:cp profile.example.md profile.md  # 填你的画像
+# 启动:docker compose up --build
+# 访问:http://localhost:8000
+services:
+  engine:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - BASE_URL=${BASE_URL}
+      - API_KEY=${API_KEY}
+      - MODEL=${MODEL:-glm-5.2}
+      - PROTOCOL=${PROTOCOL:-}
+      - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-20}
+      # 也可不挂 profile 文件、改用 env 直接注入画像文本(二选一):
+      # - CANDIDATE_PROFILE=${CANDIDATE_PROFILE}
+    volumes:
+      - ./profile.md:/app/profile.md:ro
+      - ./trace:/app/trace
+    restart: unless-stopped

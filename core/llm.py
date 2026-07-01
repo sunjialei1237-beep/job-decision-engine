@@ -28,6 +28,22 @@ def _infer_protocol(base_url: str | None, protocol: str | None) -> str:
     return "openai"
 
 
+def _extract_usage(resp: Any, protocol: str) -> dict | None:
+    """从 SDK 响应抠 token 用量 → {"token_in", "token_out"}。拿不到返回 None。
+
+    OpenAI: resp.usage.prompt_tokens / completion_tokens
+    Anthropic: resp.usage.input_tokens / output_tokens
+    """
+    try:
+        u = resp.usage
+        if protocol == "anthropic":
+            return {"token_in": int(u.input_tokens), "token_out": int(u.output_tokens)}
+        return {"token_in": int(u.prompt_tokens), "token_out": int(u.completion_tokens)}
+    except Exception:
+        # 老端点 / 自建代理可能不回 usage;trace 退化为只记基础字段
+        return None
+
+
 class LLMClient:
     """LLM 客户端(OpenAI / Anthropic 双协议)。
 
@@ -58,7 +74,8 @@ class LLMClient:
             self._openai = OpenAI(base_url=base_url, api_key=api_key)
             self._anthropic = None
 
-    def _call(self, prompt: str, temperature: float) -> str:
+    def _call(self, prompt: str, temperature: float) -> tuple[str, dict | None]:
+        """单次模型调用,返回 (content, usage)。usage 拿不到时为 None。"""
         if self.protocol == "anthropic":
             resp = self._anthropic.messages.create(
                 model=self.model,
@@ -66,14 +83,16 @@ class LLMClient:
                 temperature=temperature,
                 messages=[{"role": "user", "content": prompt}],
             )
-            return resp.content[0].text if resp.content else ""
+            content = resp.content[0].text if resp.content else ""
+            return content, _extract_usage(resp, "anthropic")
         resp = self._openai.chat.completions.create(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=temperature,
         )
-        return resp.choices[0].message.content or ""
+        content = resp.choices[0].message.content or ""
+        return content, _extract_usage(resp, "openai")
 
     def complete_json(
         self, prompt: str, *, temperature: float = 0.3, step: str = "llm"
@@ -91,7 +110,7 @@ class LLMClient:
         for _ in range(self.retries):
             t0 = time.perf_counter()
             try:
-                content = self._call(prompt, temperature)
+                content, usage = self._call(prompt, temperature)
             except (AuthenticationError, PermissionDeniedError) as e:
                 log_llm_call(
                     step=step, model=self.model,
@@ -111,7 +130,7 @@ class LLMClient:
             log_llm_call(
                 step=step, model=self.model,
                 latency_ms=(time.perf_counter() - t0) * 1000,
-                prompt=prompt, output=content,
+                prompt=prompt, output=content, usage=usage,
             )
             try:
                 return _extract_json(content)

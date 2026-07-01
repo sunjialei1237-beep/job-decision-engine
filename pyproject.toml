@@ -15,5 +15,14 @@ dependencies = [
     "anthropic>=0.40",
 ]
 
+[project.optional-dependencies]
+# Phase 2 独立服务:FastAPI + uvicorn。httpx 用于 TestClient(测试 api)。
+# 库用户(pip install .)不需要这些;服务部署才装:pip install ".[api]"
+api = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "httpx>=0.27",
+]
+
 [tool.setuptools]
 packages = ["core"]

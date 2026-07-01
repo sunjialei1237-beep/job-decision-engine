@@ -113,31 +113,96 @@ python calibrate/correlate.py --scored data/scored.jsonl
 
 **诚实 gating**:`correlate` 在真实 HR 反馈 < 30 条时拒绝计算相关性,只输出"数据不足"报告 —— 不拿噪声数据假装校准通过。反思 agent `reviewer.md` 只在闭环分析按需触发,不进投递快路径(Anthropic workflow-vs-agent 判据:确定性 pipeline 不用反思,闭环归因才是反思的合理战场)。
 
-### 轻量 trace `core/trace.py`(Step 3)
+### 轻量 trace `core/trace.py`(Step 3,Phase 2 补 token/cost)
 
-引擎每次 LLM 调用自动落一行 jsonl 观测,便于复盘延迟毛刺与重试。单一写入点在 `LLMClient.complete_json`,analyze / greeting / judge 通过 `step` 字段区分。
+引擎每次 LLM 调用自动落一行 jsonl 观测,便于复盘延迟毛刺与重试。单一写入点在 `LLMClient.complete_json`,analyze / greeting / judge 通过 `step` 字段区分。Phase 2 起 `LLMClient._call` 直接从 SDK 响应抓 `usage`,追加 token/cost(Phase 1 拿不到响应头时刻意 deferred 到此)。
 
 ```jsonl
-{"ts":"2026-07-01T03:21:09Z","step":"analyze","model":"glm-5.2","latency_ms":2143.7,"input_hash":"a1b2...","output_summary":"{\"direction\":\"A\",...}"}
+{"ts":"2026-07-01T03:21:09Z","step":"analyze","model":"glm-5.2","latency_ms":2143.7,"input_hash":"a1b2...","output_summary":"{\"direction\":\"A\",...}","token_in":820,"token_out":340,"cost_usd":0.0007}
 ```
 
-- **不含 token/cost** —— 脚本内拿不到响应头,这两项留第二阶段 Langfuse SDK 补;现在记是因为 hook 一处即可,事后补成本高。也不假装它 load-bearing:它是观测,不是判据。
+- `token_in/token_out` 来自 OpenAI/Anthropic SDK 的 usage(老端点不回 usage 时省略,退化为 Phase 1 的基础 6 字段);`cost_usd` 按 `core/pricing.py` 保守估值表算,**未知模型只记 token 不算 cost**(请按官方价目校准该表)。
+- 不假装它 load-bearing:它是观测,不是判据。
 - `input_hash` 存 prompt 的 sha256 前 16 位(不存原文 → 隐私 + 体积),`output_summary` 截前 200 字单行化。
 - 默认写 `./trace/runs/<YYYY-MM-DD>.jsonl`(已 gitignore);`TRACE_DIR` 改目录,`TRACE_DISABLED=1` 关停。trace 写失败永远静默,不影响主流程。
+
+### 独立服务:FastAPI + Docker(Phase 2)
+
+引擎也包成了 HTTP 服务,核心能力(分析 / 话术 / 一体决策)经 API 暴露,带输入护栏与限流。库形态(`core/`)与服务形态(`api/`)共享同一引擎,无重复逻辑。
+
+```bash
+pip install ".[api]"                 # 装服务依赖(fastapi / uvicorn / httpx)
+uvicorn api.app:app --port 8000      # 直接跑(需先设 LLM env + 准备 profile.md)
+```
+
+端点(请求体均为 `{title, company, jd}`):
+
+| 方法 | 路径 | 返回 |
+|---|---|---|
+| POST | `/analyze` | 分析结果 + 投递等级(S/A/B/不建议) |
+| POST | `/greeting` | 一句话开场白 |
+| POST | `/decide` | 分析 + 等级 + 开场白(一体) |
+| GET | `/health` | 可用性探针(不调 LLM) |
+| GET | `/` | 最小前端(贴 JD → 渲染结果) |
+
+**Docker 一键起**(`docker-compose.yml` 挂载 profile 只读、env 注入 API_KEY/MODEL):
+
+```bash
+cp profile.example.md profile.md     # 填画像
+export BASE_URL=... API_KEY=... MODEL=glm-5.2
+docker compose up --build            # 访问 http://localhost:8000
+```
+
+**安全护栏**(企业级边界,诚实声明:不声称根治):
+- 输入上限(JD ≤ 20000 字 / 标题公司 ≤ 200)→ 超限 422
+- 控制字符卫生(剥离 NUL/DEL 等,保留 `\t \n \r`)
+- IP 限流(滑动窗口,`RATE_LIMIT_PER_MINUTE` 默认 20)→ 429
+- **PII**:profile 是服务侧配置(env / 挂载),永不进请求 / 响应
+- **injection**:profile 不入请求 + 输出 schema 强校验 + 响应不回显原文;输入过滤只做基础卫生 —— LLM prompt injection 是开放问题,无法靠输入过滤根治
+
+LLM 调用失败 → 502;长度 / 缺字段 / 全控制字符 → 422。
+
+**关于 Langfuse**:可观测的核心价值(token / cost)已由 trace 落地,默认不引入 Langfuse(自部署需 pg + web + worker,对个人项目过重)。它是**可选扩展**:在 `LLMClient._call` 外包一层 `langfuse.observe()`、配 `LANGFUSE_*` env 即接通 —— 本仓不内置该依赖,留作按需集成。
+
+**CI**:`.github/workflows/ci.yml` 在 push / PR 时跑 `unittest discover tests` + `--fake` 评测管线(无需 LLM key)。
+
+### 生产化:认证 + 批处理 + metrics(Phase 3)
+
+Phase 2 的服务「能跑」,Phase 3 让它「能上生产」(设计文档未显式定义 Phase 3,本仓自主补齐为企业级 agent 上线最不可省的三件套):
+
+**API key 认证**:env `ENGINE_API_KEYS=k1,k2,...`(逗号分隔)开启。开启后受保护端点(`/analyze` `/greeting` `/decide` `/analyze-batch`)须带 `X-API-Key` header,否则 401。未配 env = 开发模式放行(本地 / 测试用;**生产必须配**)。`/health` `/metrics` `/` 豁免(探针 / 抓取 / 前端)。
+
+**批量分析** `POST /analyze-batch`(企业级规模场景):
+
+```json
+{"items": [{"title": "...", "company": "...", "jd": "..."}]}   <!-- ≤ 50 条 -->
+```
+
+并发(ThreadPool,max_workers=4)分析,**单条失败隔离**(该条填 `error`,其余照常,整批始终 200 —— 尽力而为语义):
+
+```json
+{"results": [{"analysis": {...}, "level": "S"}, {"error": "..."}]}
+```
+
+**Prometheus metrics** `GET /metrics`(认证豁免,便于 scraper 抓取):输出 `engine_requests_total{path,status}` + `engine_request_latency_seconds_{sum,count}`。LLM token/cost 维度已由 `core/trace` 落盘,这里不重复;接 Langfuse 见 Phase 2 说明。
+
+中间件顺序(请求穿越):**metrics(最外,记录全部含 401/429)→ 限流 → 认证 → 路由**。Starlette `add_middleware` 用 `insert(0)`,后注册者在外层 —— 代码里 metrics 最后注册才落在最外,这是刻意安排(否则被限流/认证挡掉的请求进不了 metrics)。
 
 ## 目录结构
 
 ```
 job-decision-engine/
-├── core/                   # 引擎真核:analyze_jd / generate_greeting 纯函数 + trace(Step 0/3)
+├── core/                   # 引擎真核:analyze_jd / generate_greeting + trace + pricing(Step 0/3)
+├── api/                    # 服务:FastAPI app + 认证 + 护栏 + 限流 + 批处理 + metrics + 前端
 ├── commands/  agents/      # Claude Code 形态的编排与 prompt(画像注入点)
 ├── eval/                   # 评测:golden + 跨模型 judge + 回归(Step 1)
 ├── closedloop/             # 闭环数据:outcome 回填 + 转化漏斗(Step 2)
 ├── calibrate/              # 闭环校准:load_feedback + correlate + reviewer(Step 2)
-├── tests/                  # rules + trace 单测(stdlib unittest)
+├── tests/                  # 单测:rules / trace / pricing / api / guardrails(unittest)
 ├── trace/runs/             # LLM 调用 jsonl(本地,gitignore)
 ├── docs/                   # how-it-works / candidate-profile / data-schema / architecture
 ├── examples/               # candidates.sample.json / jd-sample.md / output-sample.md
+├── Dockerfile  docker-compose.yml  .github/workflows/   # 部署 + CI(Phase 2)
 ├── profile.example.md      # 候选人画像模板(复制为 profile.md 自填)
 ├── LICENSE
 └── README.md
