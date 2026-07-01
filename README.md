@@ -113,15 +113,29 @@ python calibrate/correlate.py --scored data/scored.jsonl
 
 **诚实 gating**:`correlate` 在真实 HR 反馈 < 30 条时拒绝计算相关性,只输出"数据不足"报告 —— 不拿噪声数据假装校准通过。反思 agent `reviewer.md` 只在闭环分析按需触发,不进投递快路径(Anthropic workflow-vs-agent 判据:确定性 pipeline 不用反思,闭环归因才是反思的合理战场)。
 
+### 轻量 trace `core/trace.py`(Step 3)
+
+引擎每次 LLM 调用自动落一行 jsonl 观测,便于复盘延迟毛刺与重试。单一写入点在 `LLMClient.complete_json`,analyze / greeting / judge 通过 `step` 字段区分。
+
+```jsonl
+{"ts":"2026-07-01T03:21:09Z","step":"analyze","model":"glm-5.2","latency_ms":2143.7,"input_hash":"a1b2...","output_summary":"{\"direction\":\"A\",...}"}
+```
+
+- **不含 token/cost** —— 脚本内拿不到响应头,这两项留第二阶段 Langfuse SDK 补;现在记是因为 hook 一处即可,事后补成本高。也不假装它 load-bearing:它是观测,不是判据。
+- `input_hash` 存 prompt 的 sha256 前 16 位(不存原文 → 隐私 + 体积),`output_summary` 截前 200 字单行化。
+- 默认写 `./trace/runs/<YYYY-MM-DD>.jsonl`(已 gitignore);`TRACE_DIR` 改目录,`TRACE_DISABLED=1` 关停。trace 写失败永远静默,不影响主流程。
+
 ## 目录结构
 
 ```
 job-decision-engine/
-├── core/                   # 引擎真核:analyze_jd / generate_greeting 纯函数(Step 0)
+├── core/                   # 引擎真核:analyze_jd / generate_greeting 纯函数 + trace(Step 0/3)
 ├── commands/  agents/      # Claude Code 形态的编排与 prompt(画像注入点)
 ├── eval/                   # 评测:golden + 跨模型 judge + 回归(Step 1)
 ├── closedloop/             # 闭环数据:outcome 回填 + 转化漏斗(Step 2)
 ├── calibrate/              # 闭环校准:load_feedback + correlate + reviewer(Step 2)
+├── tests/                  # rules + trace 单测(stdlib unittest)
+├── trace/runs/             # LLM 调用 jsonl(本地,gitignore)
 ├── docs/                   # how-it-works / candidate-profile / data-schema / architecture
 ├── examples/               # candidates.sample.json / jd-sample.md / output-sample.md
 ├── profile.example.md      # 候选人画像模板(复制为 profile.md 自填)

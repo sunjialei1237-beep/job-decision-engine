@@ -65,7 +65,8 @@ def load_profile(path: Path) -> str:
 # ---------- fake clients(--fake 验证用,不调 LLM)----------
 
 class FakeAnalyzerClient:
-    def complete_json(self, prompt: str, *, temperature: float = 0.3) -> dict[str, Any]:
+    def complete_json(self, prompt: str, *, temperature: float = 0.3, step: str = "llm") -> dict[str, Any]:
+        # step 仅用于 trace 接口对齐,fake 模式不调 LLM 故忽略。
         if any(k in prompt for k in ("销售", "解决方案", "售前", "商业化")):
             d, role, score = "A", "解决方案", 7
         elif any(k in prompt for k in ("运营", "市场")):
@@ -81,7 +82,8 @@ class FakeAnalyzerClient:
 
 
 class FakeJudgeClient:
-    def complete_json(self, prompt: str, *, temperature: float = 0.3) -> dict[str, Any]:
+    def complete_json(self, prompt: str, *, temperature: float = 0.3, step: str = "llm") -> dict[str, Any]:
+        # step 仅用于 trace 接口对齐,fake 模式忽略。
         return {
             "direction": "A", "direction_agree": True, "score_plausibility": 4,
             "hidden_signal_plausibility": 3, "rationale_plausible": True,

@@ -27,13 +27,14 @@ def _complete_validated(
     *,
     temperature: float,
     schema_retries: int = 1,
+    step: str = "llm",
 ) -> M:
     """complete_json + schema 校验;漏 required 字段时带缺失提示重试。"""
     prompt = base_prompt
     last_err: Exception | None = None
     last_data: object = None
     for _ in range(schema_retries + 1):
-        data = cli.complete_json(prompt, temperature=temperature)
+        data = cli.complete_json(prompt, temperature=temperature, step=step)
         last_data = data
         try:
             return model_cls.model_validate(data)
@@ -64,6 +65,7 @@ def analyze_jd(
         AnalysisResult,
         temperature=temperature,
         schema_retries=2,
+        step="analyze",
     )
 
 
@@ -83,6 +85,7 @@ def generate_greeting(
         build_greeting_prompt(title, company, jd, profile),
         GreetingResult,
         temperature=temperature,
+        step="greeting",
     ).greeting
 
 

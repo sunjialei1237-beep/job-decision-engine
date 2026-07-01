@@ -8,9 +8,12 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from typing import Any
 
 from openai import AuthenticationError, OpenAI, PermissionDeniedError
+
+from .trace import log_llm_call
 
 
 class LLMError(Exception):
@@ -72,20 +75,47 @@ class LLMClient:
         )
         return resp.choices[0].message.content or ""
 
-    def complete_json(self, prompt: str, *, temperature: float = 0.3) -> dict[str, Any]:
+    def complete_json(
+        self, prompt: str, *, temperature: float = 0.3, step: str = "llm"
+    ) -> dict[str, Any]:
         """调用模型,返回解析后的 JSON dict。
 
         OpenAI 认证/权限错误立即失败;其余错误(含 Anthropic 协议错误、限流、超时、
         非法 JSON)重试 retries 次。
+
+        step 为逻辑步骤名(analyze/greeting/judge...),写入 trace 用于区分调用来源。
+        每次物理 _call 都记一条 trace(success/auth/error);_call 成功但 JSON 解析失败
+        时,trace 已记为成功(API 调用本身没问题),随后按原语义重试。
         """
         last_err: Exception | None = None
         for _ in range(self.retries):
+            t0 = time.perf_counter()
             try:
                 content = self._call(prompt, temperature)
-                return _extract_json(content)
             except (AuthenticationError, PermissionDeniedError) as e:
+                log_llm_call(
+                    step=step, model=self.model,
+                    latency_ms=(time.perf_counter() - t0) * 1000,
+                    prompt=prompt, output=f"[auth] {type(e).__name__}",
+                )
                 raise LLMError(f"LLM 认证/权限失败(不重试): {e}") from e
-            except Exception as e:  # noqa: BLE001 - Anthropic 错误/限流/JSON 解析,重试
+            except Exception as e:  # noqa: BLE001 - Anthropic 错误/限流/超时,重试
+                log_llm_call(
+                    step=step, model=self.model,
+                    latency_ms=(time.perf_counter() - t0) * 1000,
+                    prompt=prompt, output=f"[error] {type(e).__name__}",
+                )
+                last_err = e
+                continue
+            # _call 成功:trace 只盯 LLM 调用本身,不含本地 JSON 解析耗时
+            log_llm_call(
+                step=step, model=self.model,
+                latency_ms=(time.perf_counter() - t0) * 1000,
+                prompt=prompt, output=content,
+            )
+            try:
+                return _extract_json(content)
+            except Exception as e:  # noqa: BLE001 - JSON 解析失败,重试
                 last_err = e
         raise LLMError(f"LLM 调用 {self.retries} 次均失败: {last_err}") from last_err
 

@@ -65,4 +65,5 @@ def judge_analysis(
         JudgeResult,
         temperature=temperature,
         schema_retries=2,
+        step="judge",
     )
