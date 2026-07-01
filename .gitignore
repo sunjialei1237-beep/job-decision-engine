@@ -1,6 +1,9 @@
 # 候选人画像 —— 每人自填，绝不提交
 profile.md
 
+# 本地 secret(compose 读 .env 注入 LLM key 等)
+.env
+
 # 运行产物
 output/
 reports/
